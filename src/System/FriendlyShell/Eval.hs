@@ -1,6 +1,9 @@
 module System.FriendlyShell.Eval (EvalAST (..)) where
 
+import Control.Monad
 import Control.Monad.IO.Class
+import Data.Maybe
+import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as T
 import GHC.IO.Exception (ExitCode (ExitFailure, ExitSuccess))
@@ -8,10 +11,7 @@ import System.FriendlyShell.AST
 import System.FriendlyShell.ShellCore
 import System.IO
 import System.IO.Error (tryIOError)
-import System.Process (CreateProcess (std_out), ProcessHandle, StdStream (CreatePipe), createProcess, proc, waitForProcess)
-import Control.Arrow
-import Data.Text (Text)
-import Control.Monad
+import System.Process
 
 type Process = (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
 
@@ -33,17 +33,21 @@ finishProcess subProc = do
     hFlush stderr
     pure exitCode
 
-runProcessWithExitCode :: FilePath -> [String] -> IO Int
-runProcessWithExitCode cmd args = do
-    subProc <- getProcessHandle <$> createProcess (proc cmd args)
-    finishProcess subProc
+readProcessStdout :: Process -> IO Text
+readProcessStdout subProc = do
+    let stdoutH = getProcessStdout subProc
+    T.hGetContents stdoutH
 
-runProcessForStdout :: FilePath -> [String] -> IO (Int, Text)
-runProcessForStdout cmd args = do
-    (subProc, out) <- (getProcessHandle &&& getProcessStdout) <$> createProcess (proc cmd args){std_out = CreatePipe}
-    content <- T.hGetContents out
-    exitCode <- finishProcess subProc
-    pure (exitCode, content)
+data Redirects = Redirects {stdinH :: !StdStream, stdoutH :: !StdStream}
+
+runExecuteCommand :: ExecuteCommand -> Redirects -> ShellMonad Process
+runExecuteCommand ExecuteCommand{shProgram, shArgs, pipeTo} Redirects{stdinH, stdoutH} = do
+    cmd <- evalAtom shProgram
+    args <- mapM evalAtom shArgs
+    p <- liftIOForShell $ createProcess (proc cmd args){std_out = if isNothing pipeTo then stdoutH else CreatePipe, std_in = stdinH}
+    case pipeTo of
+        Just subC -> runExecuteCommand subC Redirects{stdinH = UseHandle $ getProcessStdout p, stdoutH}
+        _ -> pure p
 
 liftIOForShell :: IO a -> ShellMonad a
 liftIOForShell = either (\e -> newError (show e) >> failShell) pure <=< (liftIO . tryIOError)
@@ -54,11 +58,11 @@ class EvalAST a where
 evalComponent :: AComponent -> ShellMonad Text
 evalComponent (CConstant c) = pure c
 evalComponent (CVarRef v) = getVar v
-evalComponent (CExecuteSubcommandForStdout cmd args) = do
-    cmd' <- evalAtom cmd
-    args' <- mapM evalAtom args
-    (result, out) <- liftIOForShell $ runProcessForStdout cmd' args'
-    updateExitCode result
+evalComponent (CExecuteSubcommandForStdout ex) = do
+    p <- runExecuteCommand ex Redirects{stdinH=Inherit, stdoutH=CreatePipe}
+    out <- liftIOForShell $ readProcessStdout p
+    exitCode <- liftIOForShell $ exitCodeAsInt <$> waitForProcess (getProcessHandle p)
+    updateExitCode exitCode
     pure out
 
 evalAtom' :: SAtom -> ShellMonad Text
@@ -68,10 +72,9 @@ evalAtom :: SAtom -> ShellMonad String
 evalAtom = (T.unpack <$>) . evalAtom'
 
 instance EvalAST SStatement where
-    evalAST (SExecuteShell cmd args) = do
-        cmd' <- evalAtom cmd
-        args' <- mapM evalAtom args
-        exitCode <- liftIOForShell $ runProcessWithExitCode cmd' args'
+    evalAST (SExecuteShell ex) = do
+        p <- runExecuteCommand ex Redirects{stdinH=Inherit, stdoutH=Inherit}
+        exitCode <- liftIOForShell $ finishProcess $ getProcessHandle p
         updateExitCode exitCode
     evalAST (SAssignVar var toWhat) = do
         toWhat' <- evalAtom' toWhat

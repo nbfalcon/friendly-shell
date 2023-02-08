@@ -2,7 +2,7 @@
 
 module System.FriendlyShell.Parser (parseModule, parseStatement) where
 
-import Control.Applicative hiding (many)
+import Control.Applicative hiding (some, many)
 import Data.List.NonEmpty hiding (singleton)
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -20,12 +20,6 @@ some1L = (toList <$>) . some1
 
 some1T :: Parser Char -> Parser Text
 some1T = (T.pack <$>) . some1L
-
-unconsL :: NonEmpty a -> (a, [a])
-unconsL (x :| xs) = (x, xs)
-
-unconsP :: (a -> [a] -> b) -> Parser (NonEmpty a) -> Parser b
-unconsP c = (uncurry c . unconsL <$>)
 
 -- Fundamental lexical stuff
 spaceLit :: Parser ()
@@ -51,11 +45,11 @@ varAtom :: Parser String
 varAtom = (char '$' >>) $ some1L $ alphaNumChar <|> char '_'
 
 -- Grammar
-execCmd :: Parser (NonEmpty SAtom)
-execCmd = some1 (lexeme atom)
+execCmd :: Parser ExecuteCommand
+execCmd = ExecuteCommand <$> lexeme atom <*> many (lexeme atom) <*> optional (symbol "|" >> execCmd)
 
 executeForStdoutExpr :: Parser AComponent
-executeForStdoutExpr = between (symbol "(") (symbol ")") $ unconsP CExecuteSubcommandForStdout execCmd
+executeForStdoutExpr = between (symbol "(") (symbol ")") $ CExecuteSubcommandForStdout <$> execCmd
 
 component :: Parser AComponent
 component =
@@ -71,7 +65,7 @@ parseAssignStmt :: Parser SStatement
 parseAssignStmt = SAssignVar <$> lexeme varAtom <* lexeme (char '=') <*> lexeme atom
 
 parseExecStmt :: Parser SStatement
-parseExecStmt = unconsP SExecuteShell execCmd
+parseExecStmt = SExecuteShell <$> execCmd
 
 parseStatement :: Parser SStatement
 parseStatement = (spaceLit >>) $ try parseAssignStmt <|> parseExecStmt
