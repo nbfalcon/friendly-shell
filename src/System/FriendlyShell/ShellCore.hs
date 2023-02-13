@@ -1,4 +1,4 @@
-module System.FriendlyShell.ShellCore (ShellMonad, runShell, updateExitCode, newRunCmdError, newError, failShell, getVar, updateVar, withErrors) where
+module System.FriendlyShell.ShellCore (ShellMonad, initialShellState, runShell, updateExitCode, newRunCmdError, newError, failShell, getVar, updateVar, withErrors) where
 
 import Control.Applicative (Alternative)
 import Control.Monad.RWS
@@ -12,6 +12,8 @@ data ShellState = ShellState
     { lastExitCode :: !Int
     , varTable :: M.Map String T.Text
     }
+initialShellState :: ShellState
+initialShellState = ShellState {lastExitCode=0, varTable=M.empty}
 data ShellError = RunCommandError FilePath [String] | AnyError String
 
 instance Show ShellError where
@@ -47,4 +49,4 @@ getVar genericVar = do
     maybe (newError ("Unknown variable: $" ++ genericVar) >> failShell) pure boundTo
 
 runShell :: ShellMonad a -> IO (Maybe a, [ShellError])
-runShell = runWriterT . flip evalStateT ShellState{lastExitCode = 0, varTable = M.empty} . runMaybeT . runShellM
+runShell = runWriterT . flip evalStateT initialShellState . runMaybeT . runShellM
