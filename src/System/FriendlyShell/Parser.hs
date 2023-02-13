@@ -59,12 +59,17 @@ executeForStdoutExpr' = (char '$' >>) $ between (symbol "(") (symbol ")") execCm
 executeForStdoutExpr :: Parser AComponent
 executeForStdoutExpr = CExecuteSubcommandForStdout <$> executeForStdoutExpr'
 
+arithTerm :: Parser ArithExpr
+arithTerm =
+    FConstant <$> lexeme (some1T digitChar)
+        <|> FVarRef <$> lexeme varIdentifier
+        <|> FVarRef <$> lexeme (try varAtom)
+        <|> FForStdout <$> lexeme executeForStdoutExpr'
+        <|> between (symbol "(") (symbol ")") arithLikeExpr
 arithLikeExpr :: Parser ArithExpr
-arithLikeExpr
-    = FVarRef <$> varIdentifier
-    <|> FForStdout <$> executeForStdoutExpr'
-    <|> makeExprParser
-        arithLikeExpr
+arithLikeExpr =
+    makeExprParser
+        arithTerm
         [ [prefix "+" id, prefix "-" FUnegExpr]
         ,
             [ binary "+" FAddExpr

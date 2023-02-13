@@ -19,11 +19,13 @@ data SStatement
 data SModule = SModule [SStatement]
 
 data ArithExpr
-    = FVarRef String
+    = FConstant Text
+    | FVarRef String
     | FForStdout ExecuteCommand
     | FCatExpr ArithExpr ArithExpr
     | FAddExpr ArithExpr ArithExpr
     | FSubExpr ArithExpr ArithExpr
     | FDivExpr ArithExpr ArithExpr
+    | FModExpr ArithExpr ArithExpr
     | FMulExpr ArithExpr ArithExpr
     | FUnegExpr ArithExpr
