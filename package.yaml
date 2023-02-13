@@ -23,6 +23,7 @@ dependencies:
 - base
 - text
 - megaparsec
+- parser-combinators
 - process
 - extra
 - transformers

@@ -45,6 +45,7 @@ library
     , extra
     , megaparsec
     , mtl
+    , parser-combinators
     , process
     , text
     , transformers
@@ -68,6 +69,7 @@ executable friendly-shell
     , friendly-shell
     , megaparsec
     , mtl
+    , parser-combinators
     , process
     , text
     , transformers

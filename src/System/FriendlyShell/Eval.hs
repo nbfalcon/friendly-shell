@@ -54,7 +54,7 @@ liftIOForShell = either (\e -> newError (show e) >> failShell) pure <=< (liftIO 
 
 class EvalAST a where
     evalAST :: a -> ShellMonad ()
-
+    
 evalComponent :: AComponent -> ShellMonad Text
 evalComponent (CConstant c) = pure c
 evalComponent (CVarRef v) = getVar v

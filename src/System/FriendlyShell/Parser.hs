@@ -2,7 +2,8 @@
 
 module System.FriendlyShell.Parser (parseModule, parseStatement) where
 
-import Control.Applicative hiding (some, many)
+import Control.Applicative hiding (many, some)
+import Control.Monad.Combinators.Expr
 import Data.List.NonEmpty hiding (singleton)
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -11,6 +12,7 @@ import System.FriendlyShell.AST
 import Text.Megaparsec
 import Text.Megaparsec.Char
 import Text.Megaparsec.Char.Lexer qualified as L
+import Text.Printf qualified as T
 
 -- Combinators
 type Parser = Parsec Void Text
@@ -31,31 +33,60 @@ lexeme = L.lexeme spaceLit
 symbol :: Text -> Parser Text
 symbol = L.symbol spaceLit
 
+stringLitP' :: Char -> Parser Text
+stringLitP' c = char c >> T.pack <$> manyTill L.charLiteral (char $ T.fromChar c)
+
 -- Basic tokens
 stringLit :: Parser Text
-stringLit =
-    fmap T.pack $
-        (char '"' >> manyTill L.charLiteral (char '"'))
-            <|> (char '\'' >> manyTill L.charLiteral (char '\''))
+stringLit = stringLitP' '\'' <|> stringLitP' '"'
 
 identifierAtom :: Parser Text
 identifierAtom = some1T $ alphaNumChar <|> char '_' <|> char '-' <|> char '/'
 
+varIdentifier :: Parser String
+varIdentifier = some1L $ alphaNumChar <|> char '_'
+
 varAtom :: Parser String
-varAtom = (char '$' >>) $ some1L $ alphaNumChar <|> char '_'
+varAtom = char '$' >> varIdentifier
 
 -- Grammar
 execCmd :: Parser ExecuteCommand
 execCmd = ExecuteCommand <$> lexeme atom <*> many (lexeme atom) <*> optional (symbol "|" >> execCmd)
 
+executeForStdoutExpr' :: Parser ExecuteCommand
+executeForStdoutExpr' = (char '$' >>) $ between (symbol "(") (symbol ")") execCmd
+
 executeForStdoutExpr :: Parser AComponent
-executeForStdoutExpr = between (symbol "(") (symbol ")") $ CExecuteSubcommandForStdout <$> execCmd
+executeForStdoutExpr = CExecuteSubcommandForStdout <$> executeForStdoutExpr'
+
+arithLikeExpr :: Parser ArithExpr
+arithLikeExpr
+    = FVarRef <$> varIdentifier
+    <|> FForStdout <$> executeForStdoutExpr'
+    <|> makeExprParser
+        arithLikeExpr
+        [ [prefix "+" id, prefix "-" FUnegExpr]
+        ,
+            [ binary "+" FAddExpr
+            , binary "-" FSubExpr
+            , binary "*" FMulExpr
+            , binary "/" FDivExpr
+            , binaryR ".." FCatExpr
+            ]
+        ]
+prefix c f = Prefix (f <$ symbol c)
+binary c f = InfixL (f <$ symbol c)
+binaryR c f = InfixR (f <$ symbol c)
+
+arithExpr :: Parser AComponent
+arithExpr = fmap CArithExpr $ symbol "${" *> arithLikeExpr <* char '}'
 
 component :: Parser AComponent
 component =
     CConstant <$> identifierAtom
         <|> CConstant <$> stringLit
-        <|> CVarRef <$> varAtom
+        <|> CVarRef <$> try varAtom
+        <|> arithExpr
         <|> executeForStdoutExpr
 
 atom :: Parser SAtom
