@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module System.FriendlyShell.Parser (parseModule, parseStatement) where
+module System.FriendlyShell.Parser (Parser, parseModule, parseStatement, parseAtom) where
 
 import Control.Applicative hiding (many, some)
 import Control.Monad.Combinators.Expr
@@ -51,7 +51,7 @@ varAtom = char '$' >> varIdentifier
 
 -- Grammar
 execCmd :: Parser ExecuteCommand
-execCmd = ExecuteCommand <$> lexeme atom <*> many (lexeme atom) <*> optional (symbol "|" >> execCmd)
+execCmd = ExecuteCommand <$> lexeme parseAtom <*> many (lexeme parseAtom) <*> optional (symbol "|" >> execCmd)
 
 executeForStdoutExpr' :: Parser ExecuteCommand
 executeForStdoutExpr' = (char '$' >>) $ between (symbol "(") (symbol ")") execCmd
@@ -94,11 +94,11 @@ component =
         <|> arithExpr
         <|> executeForStdoutExpr
 
-atom :: Parser SAtom
-atom = AString <$> some1L component
+parseAtom :: Parser SAtom
+parseAtom = AString <$> some1L component
 
 parseAssignStmt :: Parser SStatement
-parseAssignStmt = SAssignVar <$> lexeme varAtom <* lexeme (char '=') <*> lexeme atom
+parseAssignStmt = SAssignVar <$> lexeme varAtom <* lexeme (char '=') <*> lexeme parseAtom
 
 parseExecStmt :: Parser SStatement
 parseExecStmt = SExecuteShell <$> execCmd

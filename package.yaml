@@ -55,3 +55,11 @@ executables:
     source-dirs:         app
     dependencies:
     - friendly-shell
+
+tests:
+  friendly-shell-unit:
+    main: Spec.hs
+    source-dirs: test/
+    dependencies:
+    - friendly-shell
+    - hspec

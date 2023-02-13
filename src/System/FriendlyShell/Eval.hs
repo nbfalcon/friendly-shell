@@ -1,4 +1,4 @@
-module System.FriendlyShell.Eval (EvalAST (..)) where
+module System.FriendlyShell.Eval (EvalAST (..), evalAtom') where
 
 import Control.Monad
 import Control.Monad.IO.Class
