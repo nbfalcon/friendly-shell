@@ -44,16 +44,16 @@ runExecuteCommand ExecuteCommand{shProgram, shArgs, pipeTo} Redirects{stdinH, st
     cmd <- evalAtom shProgram
     args <- mapM evalAtom shArgs
     stdoutPipe <- case pipeTo of
-        Nothing -> pure stdoutH
-        Just (PipeExec _) -> pure CreatePipe
-        Just (PipeFile f) -> do
+        PipeStdout -> pure stdoutH
+        PipeExec _ -> pure CreatePipe
+        PipeFile f -> do
             f' <- evalAtom f
             liftIOForShell $ UseHandle <$> openFile f' ReadWriteMode
     p <- liftIOForShell $ createProcess (proc cmd args){std_out = stdoutPipe, std_in = stdinH}
     case pipeTo of
-        Just (PipeExec subC) -> runExecuteCommand subC Redirects{stdinH = UseHandle $ getProcessStdout p, stdoutH}
-        Just (PipeFile _) -> pure p
-        Nothing -> pure p
+        PipeExec subC -> runExecuteCommand subC Redirects{stdinH = UseHandle $ getProcessStdout p, stdoutH}
+        PipeFile _ -> pure p
+        PipeStdout -> pure p
 
 runExecuteCommandForStdout :: ExecuteCommand -> ShellMonad Text
 runExecuteCommandForStdout ex = do

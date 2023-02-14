@@ -55,9 +55,9 @@ execCmd =
     ExecuteCommand
         <$> lexeme parseAtom
         <*> many (lexeme parseAtom)
-        <*> optional
-            ( (symbol "|" >> PipeExec <$> execCmd)
+        <*> ( (symbol "|" >> PipeExec <$> execCmd)
                 <|> (symbol ">" >> PipeFile <$> parseAtom)
+                <|> pure PipeStdout
             )
 
 executeForStdoutExpr' :: Parser ExecuteCommand
