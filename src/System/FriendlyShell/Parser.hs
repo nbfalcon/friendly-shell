@@ -50,15 +50,25 @@ varAtom :: Parser String
 varAtom = char '$' >> varIdentifier
 
 -- Grammar
+execCmd'' :: Parser ExecuteCommand
+execCmd'' =
+    ExecuteCommand <$> lexeme parseAtom <*> many (lexeme parseAtom)
+        <|> symbol "(" *> execCmd <* symbol ")"
+execCmd' :: Parser ExecuteCommand
+execCmd' = do
+    cmd <- execCmd''
+    ExecPipe cmd . PipeFile <$> (symbol ">" >> parseAtom)
+        <|> pure cmd
 execCmd :: Parser ExecuteCommand
 execCmd =
-    ExecuteCommand
-        <$> lexeme parseAtom
-        <*> many (lexeme parseAtom)
-        <*> ( (symbol "|" >> PipeExec <$> execCmd)
-                <|> (symbol ">" >> PipeFile <$> parseAtom)
-                <|> pure PipeStdout
-            )
+    makeExprParser
+        execCmd'
+        -- binaryR doesn't really matter, but this way we get "list-like" structures
+        [ [InfixR $ (\a b -> ExecPipe a $ PipeExec b) <$ try (symbol "|" >> notFollowedBy (char '|'))]
+        , [binaryR "&&" ExecAnd]
+        , [binaryR "||" ExecOr]
+        , [binaryR ";" ExecThen]
+        ]
 
 executeForStdoutExpr' :: Parser ExecuteCommand
 executeForStdoutExpr' = (char '$' >>) $ between (symbol "(") (symbol ")") execCmd
