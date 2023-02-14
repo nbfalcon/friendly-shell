@@ -2,7 +2,6 @@ module System.FriendlyShell.Eval (EvalAST (..), evalAtom') where
 
 import Control.Monad
 import Control.Monad.IO.Class
-import Data.Maybe
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as T
@@ -44,10 +43,17 @@ runExecuteCommand :: ExecuteCommand -> Redirects -> ShellMonad Process
 runExecuteCommand ExecuteCommand{shProgram, shArgs, pipeTo} Redirects{stdinH, stdoutH} = do
     cmd <- evalAtom shProgram
     args <- mapM evalAtom shArgs
-    p <- liftIOForShell $ createProcess (proc cmd args){std_out = if isNothing pipeTo then stdoutH else CreatePipe, std_in = stdinH}
+    stdoutPipe <- case pipeTo of
+        Nothing -> pure stdoutH
+        Just (PipeExec _) -> pure CreatePipe
+        Just (PipeFile f) -> do
+            f' <- evalAtom f
+            liftIOForShell $ UseHandle <$> openFile f' ReadWriteMode
+    p <- liftIOForShell $ createProcess (proc cmd args){std_out = stdoutPipe, std_in = stdinH}
     case pipeTo of
-        Just subC -> runExecuteCommand subC Redirects{stdinH = UseHandle $ getProcessStdout p, stdoutH}
-        _ -> pure p
+        Just (PipeExec subC) -> runExecuteCommand subC Redirects{stdinH = UseHandle $ getProcessStdout p, stdoutH}
+        Just (PipeFile _) -> pure p
+        Nothing -> pure p
 
 runExecuteCommandForStdout :: ExecuteCommand -> ShellMonad Text
 runExecuteCommandForStdout ex = do

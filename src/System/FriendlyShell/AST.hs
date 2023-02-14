@@ -2,7 +2,8 @@ module System.FriendlyShell.AST where
 
 import Data.Text (Text)
 
-data ExecuteCommand = ExecuteCommand { shProgram :: SAtom, shArgs :: [SAtom], pipeTo :: Maybe ExecuteCommand }
+data PipeTo = PipeExec ExecuteCommand | PipeFile SAtom
+data ExecuteCommand = ExecuteCommand { shProgram :: SAtom, shArgs :: [SAtom], pipeTo :: Maybe PipeTo }
 
 data AComponent
     = CConstant Text

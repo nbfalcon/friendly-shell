@@ -41,7 +41,7 @@ stringLit :: Parser Text
 stringLit = stringLitP' '\'' <|> stringLitP' '"'
 
 identifierAtom :: Parser Text
-identifierAtom = some1T $ alphaNumChar <|> char '_' <|> char '-' <|> char '/'
+identifierAtom = some1T $ alphaNumChar <|> char '_' <|> char '-' <|> char '/' <|> char '.'
 
 varIdentifier :: Parser String
 varIdentifier = some1L $ alphaNumChar <|> char '_'
@@ -51,7 +51,14 @@ varAtom = char '$' >> varIdentifier
 
 -- Grammar
 execCmd :: Parser ExecuteCommand
-execCmd = ExecuteCommand <$> lexeme parseAtom <*> many (lexeme parseAtom) <*> optional (symbol "|" >> execCmd)
+execCmd =
+    ExecuteCommand
+        <$> lexeme parseAtom
+        <*> many (lexeme parseAtom)
+        <*> optional
+            ( (symbol "|" >> PipeExec <$> execCmd)
+                <|> (symbol ">" >> PipeFile <$> parseAtom)
+            )
 
 executeForStdoutExpr' :: Parser ExecuteCommand
 executeForStdoutExpr' = (char '$' >>) $ between (symbol "(") (symbol ")") execCmd
